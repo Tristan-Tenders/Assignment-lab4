@@ -9,6 +9,10 @@ const APP_ENV = process.env.APP_ENV || 'development';
 // Configuration trap: defaults to an insecure fallback if not injected by the pipeline
 const API_KEY = process.env.PROD_API_KEY || 'DEV_LOCAL_INSECURE_KEY';
 
+// v2: log the db host (needs DB_URL)
+const dbHost = new URL(process.env.DB_URL).hostname;
+console.log('db host:', dbHost);
+
 const publicDir = path.join(__dirname, 'public');
 const manifestPath = path.join(__dirname, 'dist', 'build-manifest.json');
 
