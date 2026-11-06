@@ -19,6 +19,8 @@ const stations = [
   { id: 'campus', name: 'Campus North', bikes: 1, docks: 7 }
 ];
 
+const stationsSnapshot = structuredClone(stations);
+
 function send(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(data));
@@ -44,7 +46,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === 'GET' && pathname === '/api/stations') {
-    return send(res, 200, { stations });
+    return send(res, 200, { stations: stationsSnapshot });
   }
 
   if (req.method === 'POST' && pathname === '/api/reservations') {
