@@ -1,0 +1,12 @@
+# Mission 3, step 1 - Single stage, cache-friendly layer order + .dockerignore.
+FROM node:20
+WORKDIR /app
+# Copy only the dependency manifests first: this layer (and npm ci below) stays cached
+# until package.json or package-lock.json changes.
+COPY package.json package-lock.json ./
+RUN npm ci
+# Now copy the rest of the source; editing public/ only invalidates from here down.
+COPY . .
+RUN npm run build
+EXPOSE 4173
+CMD ["node", "server.js"]

@@ -1,0 +1,10 @@
+# Mission 3, step 2 - The tempting shortcut (expected to FAIL).
+# --omit=dev removes typescript, which scripts/build-manifest.js needs at BUILD time.
+FROM node:20
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY . .
+RUN npm run build
+EXPOSE 4173
+CMD ["node", "server.js"]

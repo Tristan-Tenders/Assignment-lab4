@@ -1,0 +1,2 @@
+# Intentionally ignores nothing: reproduces "no .dockerignore yet" for Dockerfile.naive.
+# (BuildKit uses <Dockerfile-name>.dockerignore in place of the root .dockerignore.)

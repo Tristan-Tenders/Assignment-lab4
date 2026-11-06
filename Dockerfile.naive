@@ -1,0 +1,9 @@
+# Mission 2 - Naive single-stage Dockerfile (deliberately bad).
+# No .dockerignore applies to this file (see Dockerfile.naive.dockerignore, which is empty),
+# so node_modules/, .git/, dist/ and everything else on the dev machine is sent to the build.
+FROM node:20
+COPY . .
+RUN npm ci
+RUN npm run build
+EXPOSE 4173
+CMD ["node", "server.js"]

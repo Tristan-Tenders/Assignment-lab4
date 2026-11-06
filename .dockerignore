@@ -1,0 +1,22 @@
+# Never send these into the build context / image
+node_modules
+npm-debug.log*
+dist
+build
+out
+.git
+.gitignore
+.github
+.env
+.env.*
+!.env.example
+Dockerfile*
+.dockerignore
+README.md
+*.md
+.DS_Store
+.vscode
+.idea
+*.swp
+*.tar
+evidence
