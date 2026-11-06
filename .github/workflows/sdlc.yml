@@ -1,0 +1,171 @@
+name: sdlc
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Build once, save the image as an artifact, promote the SAME image through five gates.
+# Each job needs the previous one, so the first red gate stops everything after it.
+
+env:
+  IMAGE: citybike:${{ github.sha }}
+  TARGET_URL: http://localhost:4173
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image once
+        run: docker build --build-arg GITHUB_SHA=${{ github.sha }} -t citybike:${{ github.sha }} .
+      - name: Save image
+        run: docker save citybike:${{ github.sha }} -o /tmp/citybike.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: citybike-image
+          path: /tmp/citybike.tar
+          retention-days: 1
+
+  staging:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: citybike-image
+          path: /tmp
+      - run: docker load -i /tmp/citybike.tar
+      - name: Start container (staging)
+        run: |
+          docker rm -f citybike-gate 2>/dev/null || true
+          docker run -d --name citybike-gate -p 4173:4173 -e APP_ENV=staging "$IMAGE"
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS "$TARGET_URL/health" && exit 0
+            sleep 1
+          done
+          echo "Service never became healthy"; docker logs citybike-gate; exit 1
+      - name: Gate - test-staging.sh
+        run: bash ./scripts/test-staging.sh
+      - name: Clean up
+        if: always()
+        run: docker rm -f citybike-gate || true
+
+  uat:
+    needs: staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: citybike-image
+          path: /tmp
+      - run: docker load -i /tmp/citybike.tar
+      - name: Start container (uat)
+        run: |
+          docker rm -f citybike-gate 2>/dev/null || true
+          docker run -d --name citybike-gate -p 4173:4173 -e APP_ENV=uat "$IMAGE"
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS "$TARGET_URL/health" && exit 0
+            sleep 1
+          done
+          echo "Service never became healthy"; docker logs citybike-gate; exit 1
+      - name: Gate - test-uat.sh
+        run: bash ./scripts/test-uat.sh
+      - name: Clean up
+        if: always()
+        run: docker rm -f citybike-gate || true
+
+  oat:
+    needs: uat
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: citybike-image
+          path: /tmp
+      - run: docker load -i /tmp/citybike.tar
+      - name: Start container (oat)
+        run: |
+          docker rm -f citybike-gate 2>/dev/null || true
+          docker run -d --name citybike-gate -p 4173:4173 -e APP_ENV=oat "$IMAGE"
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS "$TARGET_URL/health" && exit 0
+            sleep 1
+          done
+          echo "Service never became healthy"; docker logs citybike-gate; exit 1
+      - name: Gate - test-oat.sh
+        run: bash ./scripts/test-oat.sh
+      - name: Clean up
+        if: always()
+        run: docker rm -f citybike-gate || true
+
+  preprod:
+    needs: oat
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: citybike-image
+          path: /tmp
+      - run: docker load -i /tmp/citybike.tar
+      - name: Start container (preprod)
+        env:
+          PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
+        run: |
+          docker rm -f citybike-gate 2>/dev/null || true
+          docker run -d --name citybike-gate -p 4173:4173 \
+            -e APP_ENV=preprod -e PROD_API_KEY="$PROD_API_KEY" "$IMAGE"
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS "$TARGET_URL/health" && exit 0
+            sleep 1
+          done
+          echo "Service never became healthy"; docker logs citybike-gate; exit 1
+      - name: Gate - test-preprod.sh
+        env:
+          IMAGE_NAME: citybike:${{ github.sha }}
+        run: bash ./scripts/test-preprod.sh
+      - name: Clean up
+        if: always()
+        run: docker rm -f citybike-gate || true
+
+  prod:
+    needs: preprod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: citybike-image
+          path: /tmp
+      - run: docker load -i /tmp/citybike.tar
+      - name: Deploy container (production)
+        env:
+          PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
+        run: |
+          docker rm -f citybike-prod 2>/dev/null || true
+          docker run -d --name citybike-prod -p 4173:4173 \
+            -e APP_ENV=production -e PROD_API_KEY="$PROD_API_KEY" "$IMAGE"
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS "$TARGET_URL/health" && exit 0
+            sleep 1
+          done
+          echo "Service never became healthy"; docker logs citybike-prod; exit 1
+      - name: Gate - test-prod.sh
+        run: bash ./scripts/test-prod.sh
+      - name: Clean up
+        if: always()
+        run: docker rm -f citybike-prod || true
